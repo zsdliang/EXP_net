@@ -1,4 +1,5 @@
 #include "utils.h"
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 /**
@@ -78,4 +79,20 @@ uint8_t ip_prefix_match(uint8_t *ipa, uint8_t *ipb)
 uint16_t checksum16(uint16_t *data, size_t len)
 {
     // TO-DO
+    uint32_t sum = 0;
+    int i = 0;
+    if(len % 2==0) {
+        for(i = 0;i < len/2;i++) {
+            sum+=data[i];
+        }
+    } else {
+        for(i = 0;i < len/2;i++) {
+            sum+=data[i];
+        }
+        sum+=data[i]>>8;
+    }
+    while((sum & 0xffff0000) != 0) {
+        sum = (sum&0x0000ffff)+(sum>>16);
+    }
+    return ~sum;
 }
