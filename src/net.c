@@ -89,8 +89,6 @@ int net_in(buf_t *buf, uint16_t protocol, uint8_t *src)
         return 0;
     }
 
-    //未知协议则返回ICMP协议不可达信息
-    icmp_unreachable(buf, ((ip_hdr_t *)(buf->data))->src_ip, ICMP_CODE_PROTOCOL_UNREACH);
     return -1;
 }
 

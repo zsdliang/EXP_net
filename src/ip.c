@@ -34,7 +34,7 @@ void ip_in(buf_t *buf, uint8_t *src_mac)
     }
 
     //数据包目的ip地址若不是本机地址则不处理
-    if(!memcmp(hdr->dst_ip,net_if_ip,NET_IP_LEN)) {
+    if(memcmp(hdr->dst_ip,net_if_ip,NET_IP_LEN)) {
         return ;
     }
 
@@ -43,12 +43,18 @@ void ip_in(buf_t *buf, uint8_t *src_mac)
         buf_remove_padding(buf, buf->len - swap16(hdr->total_len16));
     }
 
+
+    uint16_t protocol = hdr->protocol;
+    
     //去掉ip报头
     buf_remove_header(buf, hdr->hdr_len*4);
 
-    uint16_t protocol = swap16(hdr->protocol);
-
-    net_in(buf, protocol, src_mac);
+    //其实有bug，去除hdr后hdr应不可用，但由于实际去除hdr只是移动数组下标，并不会有其它进程占用释放的空间，故hdr可继续使用
+    if(net_in(buf, protocol, hdr->src_ip)==-1) {
+        //未知协议则返回ICMP协议不可达信息
+        buf_add_header(buf, hdr->hdr_len*4);
+        icmp_unreachable(buf, hdr->src_ip, ICMP_CODE_PROTOCOL_UNREACH);
+    }
 }
 
 /**
