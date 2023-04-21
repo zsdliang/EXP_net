@@ -1,6 +1,11 @@
 #include "udp.h"
+#include "buf.h"
 #include "ip.h"
 #include "icmp.h"
+#include "net.h"
+#include "utils.h"
+#include <stdint.h>
+#include <string.h>
 
 /**
  * @brief udp处理程序表
@@ -19,6 +24,32 @@ map_t udp_table;
 static uint16_t udp_checksum(buf_t *buf, uint8_t *src_ip, uint8_t *dst_ip)
 {
     // TO-DO
+    //拷贝ip头部
+    ip_hdr_t ip_hdr;
+    memcpy(&ip_hdr,buf->data-sizeof(ip_hdr_t),sizeof(ip_hdr_t));
+    udp_hdr_t *udp_hdr = (udp_hdr_t *)buf->data;
+    uint16_t udp_len = swap16(udp_hdr->total_len16);
+    //增加伪头部
+    buf_add_header(buf, sizeof(udp_peso_hdr_t));
+    udp_peso_hdr_t *peso_hdr = (udp_peso_hdr_t *)buf->data;
+    memcpy(peso_hdr->src_ip,src_ip,NET_IP_LEN);
+    memcpy(peso_hdr->dst_ip, dst_ip, NET_IP_LEN);
+    peso_hdr->placeholder = 0;
+    peso_hdr->protocol = ip_hdr.protocol;//发送的时候没有IP头怎么办？
+    peso_hdr->total_len16 = swap16(udp_len);
+    //数据长度为奇数则需要填充
+    if(udp_len %2 == 1) {
+        buf_add_padding(buf, 1);
+    }
+    uint16_t checksum = checksum16((uint16_t *)peso_hdr, sizeof(udp_peso_hdr_t)+(((udp_len+1)>>1)<<1));//向上取整
+    if(udp_len % 2 == 1) {
+        buf_remove_padding(buf, 1);
+    }
+
+    buf_remove_header(buf, sizeof(udp_peso_hdr_t));
+    memcpy(buf->data-sizeof(ip_hdr_t), &ip_hdr, sizeof(ip_hdr_t));
+
+    return checksum;
 }
 
 /**
@@ -30,6 +61,24 @@ static uint16_t udp_checksum(buf_t *buf, uint8_t *src_ip, uint8_t *dst_ip)
 void udp_in(buf_t *buf, uint8_t *src_ip)
 {
     // TO-DO
+    udp_hdr_t *hdr = (udp_hdr_t *)buf->data;
+    if(buf->len < sizeof(udp_hdr_t) || buf->len < swap16(hdr->total_len16)) return;
+
+    uint16_t checksum_keep = hdr->checksum16;
+    hdr->checksum16 = 0;
+    hdr->checksum16 = udp_checksum(buf, src_ip, net_if_ip);
+    if(checksum_keep != hdr->checksum16) return;
+    uint16_t dstport = swap16(hdr->dst_port16);
+    udp_handler_t *handler = map_get(&udp_table, &dstport);
+    if (handler)
+    {
+        buf_remove_header(buf,sizeof(udp_hdr_t));
+        (*handler)(buf->data,swap16(hdr->total_len16),src_ip,swap16(hdr->src_port16));
+    } else {
+        buf_add_header(buf, sizeof(ip_hdr_t));
+
+        icmp_unreachable(buf, src_ip, ICMP_CODE_PROTOCOL_UNREACH);
+    }
 }
 
 /**
@@ -43,6 +92,15 @@ void udp_in(buf_t *buf, uint8_t *src_ip)
 void udp_out(buf_t *buf, uint16_t src_port, uint8_t *dst_ip, uint16_t dst_port)
 {
     // TO-DO
+    buf_add_header(buf, sizeof(udp_hdr_t));
+    udp_hdr_t *hdr = (udp_hdr_t *)buf->data;
+    hdr->src_port16 = src_port;
+    hdr->dst_port16 = dst_port;
+    hdr->checksum16 = 0;
+    hdr->total_len16 = swap16(buf->len);
+
+    udp_checksum(buf, net_if_ip, dst_ip);
+    ip_out(buf, dst_ip, NET_PROTOCOL_UDP);
 }
 
 /**

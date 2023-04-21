@@ -35,7 +35,6 @@ void tcp_handler(tcp_connect_t* connect, connect_state_t state) {
 
 int main(int argc, char const *argv[])
 {
-
     if (net_init() != 0)
 	{
         printf("net init failed.");
