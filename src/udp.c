@@ -94,12 +94,11 @@ void udp_out(buf_t *buf, uint16_t src_port, uint8_t *dst_ip, uint16_t dst_port)
     // TO-DO
     buf_add_header(buf, sizeof(udp_hdr_t));
     udp_hdr_t *hdr = (udp_hdr_t *)buf->data;
-    hdr->src_port16 = src_port;
-    hdr->dst_port16 = dst_port;
+    hdr->src_port16 = swap16(src_port);
+    hdr->dst_port16 = swap16(dst_port);
     hdr->checksum16 = 0;
     hdr->total_len16 = swap16(buf->len);
-
-    udp_checksum(buf, net_if_ip, dst_ip);
+    hdr->checksum16 = udp_checksum(buf, net_if_ip, dst_ip);
     ip_out(buf, dst_ip, NET_PROTOCOL_UDP);
 }
 
